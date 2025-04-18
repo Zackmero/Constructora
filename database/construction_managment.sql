@@ -47,6 +47,18 @@ CREATE TABLE
         phone VARCHAR(12) NOT NULL,
         details VARCHAR(100)
     );
+    
+    
+-- Table: Construction Stages
+DROP TABLE IF EXISTS construction_stages;
+
+CREATE TABLE
+    construction_stages (
+        stage_id INT AUTO_INCREMENT PRIMARY KEY,
+        stage_code VARCHAR(5) NOT NULL,
+        stage_name VARCHAR(100) NOT NULL,
+        unit_price DECIMAL(9, 2) NOT NULL
+    );
 
 -- Table: contracts
 DROP TABLE IF EXISTS contracts;
@@ -62,69 +74,14 @@ CREATE TABLE
         location VARCHAR(100) NOT NULL, -- coto de fraccionamiento
         resident_id INT, -- Residente de contrato
         grocer_id INT, -- Bodeguero de contrato
+        stage_id INT NOT NULL,
         total_progress DECIMAL(5, 2) DEFAULT 0 NOT NULL, -- Progreso del proyecto
         created_by INT, -- Creado por el usuario
         FOREIGN KEY (created_by) REFERENCES users (user_id) ON DELETE SET NULL,
         FOREIGN KEY (resident_id) REFERENCES residents (resident_id) ON DELETE SET NULL,
-        FOREIGN KEY (grocer_id) REFERENCES grocers (grocer_id) ON DELETE SET NULL
+        FOREIGN KEY (grocer_id) REFERENCES grocers (grocer_id) ON DELETE SET NULL,
+        FOREIGN KEY (stage_id) REFERENCES construction_stages(stage_id)
     );
-    
--- Table: Housing Units
-DROP TABLE IF EXISTS housing_units;
-
-CREATE TABLE
-	housing_units(
-		housing_id INT AUTO_INCREMENT PRIMARY KEY,
-        contract_id INT,
-        quantity INT NOT NULL,
-        unit_price DECIMAL(15, 2) NOT NULL,
-        total_amount DECIMAL(15, 2) NOT NULL,
-        FOREIGN KEY (contract_id) REFERENCES contracts(contract_id)
-    );
-    
--- Table: Extraordinary Concepts  
-DROP TABLE IF EXISTS extraordinary_concepts;
-
-CREATE TABLE
-	extraordinary_concepts(
-		extraordinary_id INT AUTO_INCREMENT PRIMARY KEY,
-        contract_id INT,
-        description_concept VARCHAR(70),
-        quantity INT NOT NULL,
-        unit_price DECIMAL(10, 2) NOT NULL,
-        total_amount DECIMAL(10, 2) NOT NULL,
-        FOREIGN KEY (contract_id) REFERENCES contracts(contract_id)
-    );
-    
-    -- Table: Project Invoice Summary (Caratula Concentrado Resumen general)
-DROP TABLE IF EXISTS project_invoice_summary;
-
-CREATE TABLE
-	project_invoice_summary(
-		summary_id INT AUTO_INCREMENT PRIMARY KEY,
-        contract_id INT,
-        total_amount DECIMAL(15, 2) NOT NULL,
-        advance_percentage DECIMAL(5, 2) NOT NULL DEFAULT 0,
-        advance_amount DECIMAL(10, 2) NOT NULL,
-        fg_percentage DECIMAL(5, 2)  NOT NULL DEFAULT 0,
-        fg_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
-        last_update TIMESTAMP,
-        FOREIGN KEY (contract_id) REFERENCES contracts(contract_id)
-    );
-    
--- Table: Withholdings (Retenciones)
-DROP TABLE IF EXISTS withholdings;
-
-CREATE TABLE 
-	withholdings(
-		withholding_id INT AUTO_INCREMENT PRIMARY KEY,
-        budget_advance_id INT,	-- ANTICIPO
-        guarantee_fund_id INT, -- FONDO DE GARANTIA
-        requisition_id INT,
-        
-    );
-    
-    
     
 
 
@@ -216,7 +173,7 @@ CREATE TABLE
         subtotal DECIMAL(15, 2) NOT NULL,
         iva DECIMAL(10, 2) NOT NULL,
         total_amount DECIMAL(15, 2),
-        discount DECIMAL(15, 2) NOT NULL DEFAULT 0,
+        discount DECIMAL(15, 2) DEFAULT 0,
         notes varchar(30),
         FOREIGN KEY (requisition_id) REFERENCES material_requisitions (requisition_id) ON DELETE CASCADE,
         FOREIGN KEY (material_code) REFERENCES inventories(inventory_id) ON DELETE RESTRICT,
@@ -233,6 +190,7 @@ CREATE TABLE invoices (
         contract_id INT NOT NULL,
         supplier_id INT NOT NULL,
         requisition_id INT,
+        invoice_type ENUM("Requerimiento de material", "Anticipo de proyecto") DEFAULT "Requerimiento de material",
         amount DECIMAL(10, 2) NOT NULL,
 		invoice_date DATE NOT NULL,
         invoice_payment DATE NOT NULL,
@@ -241,20 +199,98 @@ CREATE TABLE invoices (
 		FOREIGN KEY (supplier_id) REFERENCES suppliers (supplier_id) ON DELETE CASCADE,
 		FOREIGN KEY (requisition_id) REFERENCES material_requisitions(requisition_id) ON DELETE CASCADE);
 
--- Table: Construction Stages
-DROP TABLE IF EXISTS construction_stages;
+-- Table: Housing Units (Caratula Datos Total de casas)
+DROP TABLE IF EXISTS housing_units;
 
 CREATE TABLE
-    construction_stages (
-        stage_id INT AUTO_INCREMENT PRIMARY KEY,
+	housing_units(
+		housing_id INT AUTO_INCREMENT PRIMARY KEY,
         contract_id INT,
-        stage_name VARCHAR(255) NOT NULL,
-        created_by INT,
-        FOREIGN KEY (contract_id) REFERENCES contracts(contract_id) ON DELETE CASCADE,
-        FOREIGN KEY (created_by) REFERENCES users (user_id) ON DELETE SET NULL
+        quantity INT NOT NULL,
+        unit_price DECIMAL(15, 2) NOT NULL,
+        total_amount DECIMAL(15, 2) NOT NULL,
+        FOREIGN KEY (contract_id) REFERENCES contracts(contract_id)
     );
+    
+-- Table: Extraordinary Concepts  (Caratula Datos Extraordinarios)
+DROP TABLE IF EXISTS extraordinary_concepts;
 
--- Table: Work Concepts
+CREATE TABLE
+	extraordinary_concepts(
+		extraordinary_id INT AUTO_INCREMENT PRIMARY KEY,
+        contract_id INT,
+        description_concept VARCHAR(70),
+        quantity INT NOT NULL,
+        unit_price DECIMAL(10, 2) NOT NULL,
+        total_amount DECIMAL(10, 2) NOT NULL,
+        FOREIGN KEY (contract_id) REFERENCES contracts(contract_id)
+    );
+    
+        
+	-- Table: Guarantee Funds (Fondos de garantia)
+DROP TABLE IF EXISTS guarantee_funds;
+    
+CREATE TABLE 
+	guarantee_funds(
+		guarantee_fund_id INT AUTO_INCREMENT PRIMARY KEY,
+        guarantee_fund_date DATE,
+        percentage DECIMAL(4, 2) NOT NULL
+    );
+    
+    
+	-- Table: Budget Advances (Anticipos de presupuesto)
+DROP TABLE IF EXISTS budget_advances;
+    
+CREATE TABLE 
+	budget_advances(
+		budget_advance_id INT AUTO_INCREMENT PRIMARY KEY,
+        invoice_id INT NOT NULL, 
+        advance_date DATE,
+        percentage DECIMAL(5, 2) DEFAULT 0,
+        FOREIGN KEY (invoice_id) REFERENCES invoices(invoice_id) ON DELETE CASCADE
+    );
+    
+    	-- Table: Withholdings (Retenciones)
+DROP TABLE IF EXISTS withholdings;
+
+CREATE TABLE 
+	withholdings(
+		withholding_id INT AUTO_INCREMENT PRIMARY KEY,
+        budget_advance_id INT,	-- ANTICIPO
+        guarantee_fund_id INT, -- FONDO DE GARANTIA
+        requisition_id INT, -- MATERIALES COMPRADOS
+        FOREIGN KEY (budget_advance_id) REFERENCES budget_advances(budget_advance_id) ON DELETE CASCADE,
+        FOREIGN KEY (guarantee_fund_id) REFERENCES guarantee_funds(guarantee_fund_id),
+        FOREIGN KEY (requisition_id) REFERENCES material_requisitions(requisition_id)
+    );
+    
+    -- Table: Project Invoice Summary (Caratula Datos Resumen general)
+DROP TABLE IF EXISTS project_invoice_summary;
+
+CREATE TABLE
+	project_invoice_summary(
+		summary_id INT AUTO_INCREMENT PRIMARY KEY,
+        contract_id INT,
+        total_amount DECIMAL(15, 2) NOT NULL,
+		budget_advance_id INT NOT NULL,
+        outstanding_balance_advance DECIMAL(15, 2), -- Saldo a ejercer de anticipo
+        guarantee_fund_id INT,	
+        outstanding_balance_fund DECIMAL(15, 2),  -- Saldo a ejercer de fondo de garantia
+        withholding_material_id INT, -- Retencion de inventario
+        material_discount DECIMAL(12, 2), -- Descuentos de materiales
+        billable_balance DECIMAL(10, 2) NOT NULL, -- Saldo Facturable
+        last_update TIMESTAMP,
+        FOREIGN KEY (contract_id) REFERENCES contracts(contract_id),
+        FOREIGN KEY (budget_advance_id) REFERENCES budget_advances(budget_advance_id) ON DELETE CASCADE,
+        FOREIGN KEY (guarantee_fund_id) REFERENCES guarantee_funds(guarantee_fund_id),
+        FOREIGN KEY (withholding_material_id) REFERENCES witholdings(withholding_id)
+    );
+    
+
+
+    
+
+-- Table: Work Concepts (Estimacion )
 DROP TABLE IF EXISTS work_concepts;
 
 CREATE TABLE
