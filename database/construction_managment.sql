@@ -74,7 +74,7 @@ CREATE TABLE
         location VARCHAR(100) NOT NULL, -- coto de fraccionamiento
         resident_id INT, -- Residente de contrato
         grocer_id INT, -- Bodeguero de contrato
-        stage_id INT NOT NULL,
+        stage_id INT NOT NULL, -- Status de la obra
         total_progress DECIMAL(5, 2) DEFAULT 0 NOT NULL, -- Progreso del proyecto
         created_by INT, -- Creado por el usuario
         FOREIGN KEY (created_by) REFERENCES users (user_id) ON DELETE SET NULL,
@@ -132,8 +132,10 @@ CREATE TABLE
         category_id INT NOT NULL, -- Categoria de material
         measure_id INT NOT NULL, -- Unidad de medida
         stock DECIMAL(10, 2) NOT NULL default 0, -- Cantidad existente
+        grocer_id INT,
         last_update TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         FOREIGN KEY (measure_id) REFERENCES measures (measure_id) ON DELETE CASCADE,
+        FOREIGN KEY (grocer_id) REFERENCES grocers(grocer_id)  ON DELETE CASCADE,
         FOREIGN KEY (category_id) REFERENCES material_categories (category_id) ON DELETE CASCADE
     );
 
@@ -153,6 +155,7 @@ CREATE TABLE
         delivery_location VARCHAR(100) NOT NULL, -- Lugar de entrega
         received_by VARCHAR(100) NOT NULL, -- Recibe no es un usuario
         status_material ENUM ('PENDING', 'APPROVED', 'DELIVERED', 'CANCELED') DEFAULT 'PENDING',
+        notes varchar(150),
         FOREIGN KEY (contract_id) REFERENCES contracts (contract_id) ON DELETE CASCADE,
         FOREIGN KEY (supplier_id) REFERENCES suppliers (supplier_id) ON DELETE SET NULL,
         FOREIGN KEY (grocer_id) REFERENCES grocers (grocer_id) ON DELETE SET NULL,
@@ -172,13 +175,28 @@ CREATE TABLE
         unit_price DECIMAL(10, 2) NOT NULL,
         subtotal DECIMAL(15, 2) NOT NULL,
         iva DECIMAL(10, 2) NOT NULL,
-        total_amount DECIMAL(15, 2),
         discount DECIMAL(15, 2) DEFAULT 0,
+        total_amount DECIMAL(15, 2),
         notes varchar(30),
         FOREIGN KEY (requisition_id) REFERENCES material_requisitions (requisition_id) ON DELETE CASCADE,
         FOREIGN KEY (material_code) REFERENCES inventories(inventory_id) ON DELETE RESTRICT,
         FOREIGN KEY (measure_id) REFERENCES measures (measure_id) ON DELETE SET NULL
     );
+    
+
+        
+-- Table: Housing Units (Caratula Datos Total de casas)
+DROP TABLE IF EXISTS housing_units;
+
+CREATE TABLE
+	housing_units(
+		housing_id INT AUTO_INCREMENT PRIMARY KEY,
+        contract_id INT,
+        quantity INT NOT NULL,
+        FOREIGN KEY (contract_id) REFERENCES contracts(contract_id)
+    );
+    
+
 
 -- Table: Budgets CONCENTRADOS
 DROP TABLE IF EXISTS invoices;
@@ -193,52 +211,14 @@ CREATE TABLE invoices (
         invoice_type ENUM("Requerimiento de material", "Anticipo de proyecto") DEFAULT "Requerimiento de material",
         amount DECIMAL(10, 2) NOT NULL,
 		invoice_date DATE NOT NULL,
-        invoice_payment DATE NOT NULL,
-        type_payment ENUM('Contado', 'Credito') default 'Contado',
+        invoice_payment_date DATE NOT NULL,
+        payment_type ENUM('Contado', 'Credito') default 'Contado',
         FOREIGN KEY (contract_id) REFERENCES contracts (contract_id) ON DELETE CASCADE,
 		FOREIGN KEY (supplier_id) REFERENCES suppliers (supplier_id) ON DELETE CASCADE,
 		FOREIGN KEY (requisition_id) REFERENCES material_requisitions(requisition_id) ON DELETE CASCADE);
 
--- Table: Housing Units (Caratula Datos Total de casas)
-DROP TABLE IF EXISTS housing_units;
 
-CREATE TABLE
-	housing_units(
-		housing_id INT AUTO_INCREMENT PRIMARY KEY,
-        contract_id INT,
-        quantity INT NOT NULL,
-        unit_price DECIMAL(15, 2) NOT NULL,
-        total_amount DECIMAL(15, 2) NOT NULL,
-        FOREIGN KEY (contract_id) REFERENCES contracts(contract_id)
-    );
-    
--- Table: Extraordinary Concepts  (Caratula Datos Extraordinarios)
-DROP TABLE IF EXISTS extraordinary_concepts;
-
-CREATE TABLE
-	extraordinary_concepts(
-		extraordinary_id INT AUTO_INCREMENT PRIMARY KEY,
-        contract_id INT,
-        description_concept VARCHAR(70),
-        quantity INT NOT NULL,
-        unit_price DECIMAL(10, 2) NOT NULL,
-        total_amount DECIMAL(10, 2) NOT NULL,
-        FOREIGN KEY (contract_id) REFERENCES contracts(contract_id)
-    );
-    
-        
-	-- Table: Guarantee Funds (Fondos de garantia)
-DROP TABLE IF EXISTS guarantee_funds;
-    
-CREATE TABLE 
-	guarantee_funds(
-		guarantee_fund_id INT AUTO_INCREMENT PRIMARY KEY,
-        guarantee_fund_date DATE,
-        percentage DECIMAL(4, 2) NOT NULL
-    );
-    
-    
-	-- Table: Budget Advances (Anticipos de presupuesto)
+    	-- Table: Budget Advances (Anticipos)
 DROP TABLE IF EXISTS budget_advances;
     
 CREATE TABLE 
@@ -250,19 +230,37 @@ CREATE TABLE
         FOREIGN KEY (invoice_id) REFERENCES invoices(invoice_id) ON DELETE CASCADE
     );
     
-    	-- Table: Withholdings (Retenciones)
-DROP TABLE IF EXISTS withholdings;
+    
+    -- Table: Extraordinary Concepts  (Caratula Datos Extraordinarios)
+DROP TABLE IF EXISTS extraordinary_concepts;
 
-CREATE TABLE 
-	withholdings(
-		withholding_id INT AUTO_INCREMENT PRIMARY KEY,
-        budget_advance_id INT,	-- ANTICIPO
-        guarantee_fund_id INT, -- FONDO DE GARANTIA
-        requisition_id INT, -- MATERIALES COMPRADOS
-        FOREIGN KEY (budget_advance_id) REFERENCES budget_advances(budget_advance_id) ON DELETE CASCADE,
-        FOREIGN KEY (guarantee_fund_id) REFERENCES guarantee_funds(guarantee_fund_id),
-        FOREIGN KEY (requisition_id) REFERENCES material_requisitions(requisition_id)
+CREATE TABLE
+	extraordinary_concepts(
+		extraordinary_id INT AUTO_INCREMENT PRIMARY KEY,
+        contract_id INT NOT NULL,
+        estimate_id INT NOT NULL,
+        description_concept VARCHAR(70),
+        quantity INT NOT NULL,
+        unit_price DECIMAL(10, 2) NOT NULL,
+        total_amount DECIMAL(10, 2) NOT NULL,
+        FOREIGN KEY (estimate_id) REFERENCES project_estimates (estimate_id) ON DELETE CASCADE,
+        FOREIGN KEY (contract_id) REFERENCES contracts(contract_id)
     );
+    
+    
+	-- Table: Guarantee Funds (Fondos de garantia)
+DROP TABLE IF EXISTS guarantee_funds;
+    
+CREATE TABLE 
+	guarantee_funds(
+		guarantee_fund_id INT AUTO_INCREMENT PRIMARY KEY,
+        guarantee_fund_date DATE,
+        percentage DECIMAL(4, 2) NOT NULL,
+        amount DECIMAL(10, 2) NOT NULL
+    );
+    
+
+
     
     -- Table: Project Invoice Summary (Caratula Datos Resumen general)
 DROP TABLE IF EXISTS project_invoice_summary;
@@ -283,24 +281,81 @@ CREATE TABLE
         FOREIGN KEY (contract_id) REFERENCES contracts(contract_id),
         FOREIGN KEY (budget_advance_id) REFERENCES budget_advances(budget_advance_id) ON DELETE CASCADE,
         FOREIGN KEY (guarantee_fund_id) REFERENCES guarantee_funds(guarantee_fund_id),
-        FOREIGN KEY (withholding_material_id) REFERENCES witholdings(withholding_id)
+        FOREIGN KEY (withholding_material_id) REFERENCES material_requisitions(requisition_id)
     );
     
 
-
-    
-
--- Table: Work Concepts (Estimacion )
-DROP TABLE IF EXISTS work_concepts;
+-- Table: Project Estimates (Estimacion de proyecto)
+DROP TABLE IF EXISTS project_estimates;
 
 CREATE TABLE
-    work_concepts (
-        concept_id INT AUTO_INCREMENT PRIMARY KEY,
-        stage_id INT NOT NULL,
+    project_estimate (
+        estimate_id INT AUTO_INCREMENT PRIMARY KEY,
+        estimate_number INT NOT NULL,
+        contract_id INT NOT NULL,
+        estimate_date DATE NOT NULL,
+        housing_id INT NOT NULL,
+        total_amount DECIMAL(15, 2) NOT NULL,
+        fg_retention DECIMAL(15, 2) NOT NULL,
+        advance_retention DECIMAL(15, 2) NOT NULL,
+        material_retention DECIMAL(15, 2) NOT NULL,
+        total_to_pay DECIMAL(15, 2) NOT NULL,
         description VARCHAR(255) NOT NULL,
         unit VARCHAR(50) NOT NULL,
-        FOREIGN KEY (stage_id) REFERENCES construction_stages (stage_id) ON DELETE CASCADE
+        FOREIGN KEY (housing_id) REFERENCES housing_units(housing_id) ON DELETE CASCADE,
+		FOREIGN KEY (contract_id) REFERENCES contracts (contract_id) ON DELETE CASCADE
     );
+    
+		-- Table: Estimate Details
+DROP TABLE IF EXISTS estimate_details;
+
+CREATE TABLE
+	estimate_detail(
+		estimate_detail_id INT AUTO_INCREMENT PRIMARY KEY,
+        estimate_id INT NOT NULL,
+        contract_id INT NOT NULL,
+        housing_id INT NOT NULL,
+        FOREIGN KEY (estimate_id) REFERENCES project_estimates (estimate_id) ON DELETE CASCADE,
+        FOREIGN KEY (contract_id) REFERENCES contracts(contract_id) ON DELETE CASCADE,
+        FOREIGN KEY (housing_id) REFERENCES housing_units(housing_id) ON DELETE SET NULL
+    );
+    
+    
+	-- Table: Conctract Stages (por si los contratos tienen diferentes etapas de construccion)
+DROP TABLE IF EXISTS stage_progress;
+
+CREATE TABLE
+	stage_progress(
+		progress_id INT AUTO_INCREMENT PRIMARY KEY,
+        estimate_id INT NOT NULL, -- Estimacion
+        unit_price DECIMAL(10, 2) NOT NULL, -- Precio por unidad
+        stage_id INT NOT NULL, -- Etapa de construccion
+        housing_id 	INT NOT NULL, -- Cantidad de casas
+        previous_estimate_volume INT NOT NULL, -- Estimacion anterior
+        current_estimate_volume INT NOT NULL, -- Esta estimacion
+        accumulated_volume INT NOT NULL, -- Acumulado hasta la fecha
+        remaining_estimate INT NOT NULL DEFAULT 0, -- Casas restantes
+        current_amount DECIMAL(10, 2) NOT NULL, -- Importe de estimacion
+        discount DECIMAL(8, 2), -- Descuentos
+        
+        FOREIGN KEY (estimate_id) REFERENCES project_estimates(estimate_id) ON DELETE CASCADE,
+		FOREIGN KEY (stage_id) REFERENCES construction_stages(stage_id) ON DELETE CASCADE,
+		FOREIGN KEY (housing_id) REFERENCES housing_units(unit_id) ON DELETE CASCADE
+    );
+    
+    	-- Table: Conctract Stages (por si los contratos tienen diferentes etapas de construccion)
+DROP TABLE IF EXISTS stage_progress;
+
+CREATE TABLE
+	stage_progress(
+    stage_progress_id INT AUTO_INCREMENT PRIMARY KEY,
+    estimate_id INT NOT NULL,
+    extraordinary_id INT NOT NULL,
+    
+    
+);
+    
+    
 
 -- Table: Work Progress
 DROP TABLE IF EXISTS work_progress;
@@ -308,14 +363,14 @@ DROP TABLE IF EXISTS work_progress;
 CREATE TABLE
     work_progress (
         progress_id INT AUTO_INCREMENT PRIMARY KEY,
-        concept_id INT NOT NULL,
+        stage_id INT NOT NULL,
         progress_date DATE NOT NULL,
         estimate_number INT NOT NULL,
         executed_quantity DECIMAL(10, 2) NOT NULL,
         progress_percentage DECIMAL(5, 2) NOT NULL,
         updated_by INT,
         FOREIGN KEY (updated_by) REFERENCES users (user_id) ON DELETE SET NULL,
-        FOREIGN KEY (concept_id) REFERENCES work_concepts (concept_id) ON DELETE CASCADE
+        FOREIGN KEY (stage_id) REFERENCES construction_stages (stage_id) ON DELETE CASCADE
     );
 
 DELIMITER //
